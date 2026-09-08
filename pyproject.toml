@@ -1,0 +1,13 @@
+[project]
+name = "vera-agent-benchmark"
+version = "0.1.0"
+description = "Vera agent benchmark harness"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "daytona>=0.203.0",
+    "rlp-sdk>=0.3.2",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.1.1",
+    "pytest",
+]
