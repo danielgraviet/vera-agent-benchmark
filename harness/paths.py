@@ -1,4 +1,4 @@
-"""Default JSONL output paths under data/<benchmark>/<series>/."""
+"""Default JSONL output paths under ``data/<benchmark>/<series>/``."""
 
 from __future__ import annotations
 
@@ -8,35 +8,39 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def rlp_cpu_series_suffix(cpu: float | None, cpu_max: float | None = None) -> str:
-    """Return the suffix for fractional RLP series names."""
+def _fmt_cpu(value: float) -> str:
+    """Format a CPU value for folder names (``0.5`` → ``0p5``)."""
+    text = f"{float(value):.6f}".rstrip("0").rstrip(".")
+    return text.replace(".", "p")
+
+
+def _safe_segment(value: str) -> str:
+    return value.replace("/", "-")
+
+
+def _rlp_cpu_series_suffix(cpu: float | None, cpu_max: float | None = None) -> str:
+    """Suffix for non-default RLP CPU settings (e.g. ``-c0p5-max1``)."""
     parts: list[str] = []
     if cpu is not None and abs(float(cpu) - 1.0) >= 1e-9:
-        text = f"{float(cpu):.6f}".rstrip("0").rstrip(".")
-        parts.append("c" + text.replace(".", "p"))
+        parts.append("c" + _fmt_cpu(cpu))
     if cpu_max is not None:
-        text = f"{float(cpu_max):.6f}".rstrip("0").rstrip(".")
-        parts.append("max" + text.replace(".", "p"))
-    if not parts:
-        return ""
-    return "-" + "-".join(parts)
+        parts.append("max" + _fmt_cpu(cpu_max))
+    return ("-" + "-".join(parts)) if parts else ""
 
 
-def result_series_name(
+def _result_series_name(
     runner: str,
     target: str | None = None,
     *,
     rlp_cpu: float | None = None,
     rlp_cpu_max: float | None = None,
 ) -> str:
-    """Map CLI runner + optional target to a results folder."""
+    """Map CLI runner + optional target to a results folder name."""
     if runner == "rlp":
-        base = "rlp"
-        if target:
-            base = f"rlp-{target.replace('/', '-')}"
-        return base + rlp_cpu_series_suffix(rlp_cpu, rlp_cpu_max)
+        base = f"rlp-{_safe_segment(target)}" if target else "rlp"
+        return base + _rlp_cpu_series_suffix(rlp_cpu, rlp_cpu_max)
     if target:
-        return f"{runner}-{target.replace('/', '-')}"
+        return f"{runner}-{_safe_segment(target)}"
     return runner
 
 
@@ -51,11 +55,10 @@ def default_output_path(
 ) -> Path:
     """Path like ``data/agent/rlp/concurrency_<ts>_n10.jsonl``."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    series = result_series_name(
+    series = _result_series_name(
         runner,
         target,
         rlp_cpu=rlp_cpu,
         rlp_cpu_max=rlp_cpu_max,
     )
-    base = ROOT / "data" / benchmark / series
-    return base / f"concurrency_{stamp}_n{n}.jsonl"
+    return ROOT / "data" / benchmark / series / f"concurrency_{stamp}_n{n}.jsonl"
