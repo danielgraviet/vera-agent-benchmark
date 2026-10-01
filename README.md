@@ -40,11 +40,6 @@ See `.env.example`. Minimum:
 - **Daytona:** `DAYTONA_API_KEY` (and any other vars your Daytona SDK expects)
 - **RLP:** `RLP_API_KEY` (optional `RLP_API_URL`); optional CLI `--target` / `--toolbox-url`
 
-Optional RLP client tuning (defaults are usually fine):
-
-- `RLP_HTTP_MAX_CONNECTIONS` (default `512`)
-- `RLP_WAIT_POLL_START_S` / `RLP_WAIT_POLL_FACTOR` / `RLP_WAIT_POLL_MAX_S`
-
 ## Quick start
 
 ```bash
@@ -94,5 +89,3 @@ goldens only when the change is intentional.
 - RLP boots use `--snapshot` / the benchmark `registry_image` (default
   `agent-benchmark:v3`) passed straight through to create — no native snapshot
   lookup in this repo.
-- RLP client tuning monkey-patches `rlp-sdk` connection pool and start-poll
-  cadence (`harness/rlp_client_tuning.py`) for high-concurrency ladders.

@@ -9,7 +9,6 @@ from typing import Any
 from dotenv import load_dotenv
 from rlp import Daytona
 
-from harness import rlp_client_tuning
 from harness.benchmarks import AGENT, BenchmarkSpec
 from harness.common import apply_workload_payload
 from harness.env_probe import (
@@ -57,9 +56,6 @@ class RlpRunner:
         disk: float | None = None,
     ) -> None:
         load_dotenv(ROOT / ".env")
-        # Client-side throughput tuning (pool + poll cadence). Env-tunable; see
-        # harness/rlp_client_tuning.py.
-        rlp_client_tuning.apply()
         if episodes_per_sandbox < 1:
             raise ValueError("episodes_per_sandbox must be >= 1")
         if cpu <= 0:
@@ -92,8 +88,7 @@ class RlpRunner:
             f"toolbox_url={getattr(config, 'toolbox_url', None)!r} "
             f"benchmark={spec.id!r} episodes_per_sandbox={episodes_per_sandbox} "
             f"resources=cpu={cpu},cpu_max={cpu_max},memory={mem}GiB,"
-            f"memory_max={memory_max},disk={disk_gib}GiB "
-            f"client_tuning={rlp_client_tuning.settings()}"
+            f"memory_max={memory_max},disk={disk_gib}GiB"
         )
 
         self._boot_image = self._snapshot.strip()

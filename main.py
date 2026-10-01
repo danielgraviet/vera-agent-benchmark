@@ -10,7 +10,6 @@ from pathlib import Path
 from harness.benchmarks import BENCHMARK_IDS, get_benchmark
 from harness.common import run_hold_suite, run_suite
 from harness.paths import default_output_path
-from harness.rlp_client_tuning import settings as rlp_client_tuning_settings
 from harness.runners import (
     DAYTONA_FAMILY,
     RUNNERS,
@@ -194,7 +193,6 @@ def main() -> None:
         "hold_then_exec": bool(args.hold_then_exec),
     }
     if args.runner == "rlp":
-        meta["rlp_client_tuning"] = rlp_client_tuning_settings()
         meta["client_host"] = socket.gethostname()
 
     runner = build_runner(args)
