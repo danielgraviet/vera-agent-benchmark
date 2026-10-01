@@ -1,8 +1,4 @@
-"""RLP sandbox create via SDK ``CreateSandboxFromImageParams``.
-
-Sends ``cpu_arch`` / ``cpu_type`` / ``mode`` from the target profile so ARM64
-and Vera cells get the right placement (see ``harness.regions``).
-"""
+"""RLP sandbox create via SDK ``CreateSandboxFromImageParams``."""
 
 from __future__ import annotations
 
@@ -12,14 +8,7 @@ from typing import Any
 from rlp import CreateSandboxFromImageParams, Daytona, Resources
 from rlp.sandbox import Sandbox
 
-from harness.regions import (
-    require_sdk_field,
-    resolve_rlp_cpu_arch,
-    resolve_rlp_cpu_type,
-    resolve_rlp_mode,
-)
-
-# Eng API maps cpu_max → vcpus_max; some SDK checkouts use one name or the other.
+# Some SDK versions use alternate names for burst caps.
 _CPU_MAX_ALIASES = ("cpu_max", "vcpus_max", "max_cpu")
 _MEM_MAX_ALIASES = ("memory_max", "mem_max", "max_memory")
 
@@ -76,8 +65,7 @@ def build_rlp_resources(
             have = ", ".join(sorted(n for n in available if n != "**")) or "(none)"
             print(
                 f"rlp resources: SDK has no {aliases[0]} (tried {', '.join(aliases)}; "
-                f"fields={have}). Sending guarantee only; burst cap is the cell "
-                f"RLP_BURST_MAX_* default, not this flag.",
+                f"fields={have}). Sending guarantee only.",
                 flush=True,
             )
             continue
@@ -93,60 +81,26 @@ def create_rlp_sandbox(
     image: str,
     timeout: int = 60,
     resources: Resources | None = None,
-    cpu_arch: str | None = None,
-    cpu_type: str | None = None,
-    mode: str | None = None,
     name: str | None = None,
-    target: str | None = None,
-    omit_mode: bool = False,
 ) -> Sandbox:
-    """Create a sandbox and wait until started.
-
-    Defaults from ``target`` when omitted:
-    - ``arm64-test-1`` / ``vera`` → ``cpu_arch=arm64``
-    - ``vera`` → ``cpu_type=vera``, ``mode=dedicated`` (skipped when
-      ``omit_mode`` — burstable creates must not reserve a full vCPU)
-    """
-    if cpu_arch is None:
-        cpu_arch = resolve_rlp_cpu_arch(target)
-    if cpu_type is None:
-        cpu_type = resolve_rlp_cpu_type(target)
-    if omit_mode:
-        mode = None
-    elif mode is None:
-        mode = resolve_rlp_mode(target)
-
-    if cpu_arch is not None:
-        require_sdk_field(
-            CreateSandboxFromImageParams,
-            "cpu_arch",
-            purpose=f"cpu_arch={cpu_arch!r}",
-        )
-    if cpu_type is not None:
-        require_sdk_field(
-            CreateSandboxFromImageParams,
-            "cpu_type",
-            purpose=f"cpu_type={cpu_type!r}",
-        )
-
+    """Create a sandbox from ``image`` and wait until started."""
     params = _create_params(
         image=image,
         name=name,
         resources=resources,
-        cpu_arch=cpu_arch,
-        cpu_type=cpu_type,
-        mode=mode,
     )
     region = getattr(client, "_target", None)
+
     def _first(*names: str) -> Any:
-        for name in names:
-            if hasattr(resources, name):
-                return getattr(resources, name)
+        if resources is None:
+            return None
+        for n in names:
+            if hasattr(resources, n):
+                return getattr(resources, n)
         return None
 
     print(
-        f"rlp create: region={region!r} cpu_arch={cpu_arch!r} "
-        f"cpu_type={cpu_type!r} mode={mode!r} image={image!r} "
+        f"rlp create: region={region!r} image={image!r} "
         f"cpu={getattr(resources, 'cpu', None)!r} "
         f"cpu_max={_first(*_CPU_MAX_ALIASES)!r} "
         f"memory={getattr(resources, 'memory', None)!r} "

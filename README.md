@@ -1,29 +1,24 @@
 # vera-agent-benchmark
 
-This repository contains the code for the Vera agent benchmark only.
+Small harness for the Vera agent concurrency benchmark.
 
-It is meant to be a small, shareable harness repo:
-
-- one workload: `agent`
-- two runners: `daytona` and `rlp`
-- no benchmark results or generated JSONL files
-
-Included:
-
-- the agent workload entrypoint under `workload/`
-- the concurrency harness under `harness/`
-- daytona and rlp runner support
+- one workload: `agent` (`workload/`)
+- runners: `daytona`, `daytona-vm`, `daytona-vm-hot`, `rlp`
+- no benchmark results or generated JSONL files (gitignored under `data/`)
 
 Layout:
 
-- `main.py` is the CLI entrypoint
-- `workload/agent.py` runs the benchmark workload inside each sandbox
-- `harness/` contains runner setup, output paths, and reporting helpers
+- `main.py` — CLI entrypoint
+- `workload/agent.py` — workload inside each sandbox
+- `harness/` — runners, output paths, reporting helpers
+- `Dockerfile` — image used for registry boots (`agent-benchmark:v3`)
 
 Quick start:
 
 ```bash
 uv sync --frozen
+# Daytona (credentials via DAYTONA_* / .env)
 uv run main.py --runner daytona --levels 1 8 --n 20
-uv run main.py --runner rlp --target arm64-test-1 --levels 1 8
+# RLP (credentials via RLP_API_KEY / .env; optional --target / --toolbox-url)
+uv run main.py --runner rlp --levels 1 8 --n 20
 ```

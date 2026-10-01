@@ -61,8 +61,8 @@ def resolve_boot_image(client: Daytona, name_or_manifest: str) -> str:
     if snap is None:
         raise DaytonaError(
             f"Native RLP snapshot {name_or_manifest!r} not found on /snapshots. "
-            "Build it with: uv run scripts/build_rlp_snapshot.py "
-            "(or pass a registry image as --snapshot, e.g. user/image:tag)"
+            "Pass a registry image as --snapshot (e.g. agent-benchmark:v3) "
+            "or a ready native snapshot name."
         )
     if snap.get("status") != "ready":
         raise DaytonaError(

@@ -1,25 +1,14 @@
 """Client-side throughput tuning for the RLP SDK (rlp-sdk / httpx).
 
-Why this exists (measured on vera, 2026-08-21, 176 held sandboxes, ~1.1s
-in-guest episodes; guest p50 identical in every configuration):
+Two SDK defaults can cap client-side throughput at high concurrency:
 
-    client location        pool   exec tput   wall_p50 (guest ~1.15s)
-    laptop via SSH tunnel   100      19.5/s   7.6s   <- ladder plateau
-    laptop via SSH tunnel   600      30.6/s   6.6s   (tunnel TCP serializes)
-    co-located (19ms RTT)   100      82.3/s   1.9s   (pool queueing only)
-    co-located (19ms RTT)   600     128.9/s   1.2s   = guest + RTT, no throttle
-
-Two SDK defaults cause the client-side plateau:
-
-1. ``rlp.http.HttpClient`` builds ``httpx.Client`` with no ``limits`` ->
-   httpx's default 100 max connections. Every harness worker shares one
-   client, so at concurrency > ~100 exec dispatch queues client-side while
-   the fleet idles. The plateau scales with (episode + RTT) x 100.
+1. ``rlp.http.HttpClient`` builds ``httpx.Client`` with no ``limits``, so
+   httpx defaults to 100 max connections. Every harness worker shares one
+   client; above ~100 concurrency, exec dispatch queues client-side.
 
 2. ``Sandbox.wait_until_started`` polls ``GET /vms/:id`` every 100ms per
-   pending sandbox. A 352-wide create wave = ~3.5k req/s of polling sharing
-   the same pool; raising the pool WITHOUT tempering the polls makes ladders
-   WORSE (measured on phoenix: 24/s -> 9.8/s with pool=2000 and stock polls).
+   pending sandbox. Wide create waves flood the connection pool; raising
+   the pool without slowing polls can make ladders worse.
 
 ``apply()`` patches both, idempotently, tunable via env:
 
@@ -28,9 +17,7 @@ Two SDK defaults cause the client-side plateau:
     RLP_WAIT_POLL_FACTOR       backoff factor per poll (1.5)
     RLP_WAIT_POLL_MAX_S        poll interval ceiling (2.0)
 
-The third contributor -- RTT -- cannot be patched: run the harness near the
-cell for chip-grade numbers (rlp-control for vera, the phoenix cell API host
-for us-phoenix-1). See RUNBOOK.md.
+RTT still matters: run the harness near the API for best numbers.
 """
 
 from __future__ import annotations

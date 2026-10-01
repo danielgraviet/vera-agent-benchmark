@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from harness.regions import ARM64_TARGETS, DAYTONA_GRAVITON5_TARGET
-
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -31,28 +29,14 @@ def result_series_name(
     rlp_cpu: float | None = None,
     rlp_cpu_max: float | None = None,
 ) -> str:
-    """Map CLI runner + optional RLP target to a results folder."""
+    """Map CLI runner + optional target to a results folder."""
     if runner == "rlp":
-        if target == "vera":
-            base = "rlp-vera"
-        elif target == "us-phoenix-1":
-            base = "rlp-phoenix"
-        elif target == "redswitches":
-            base = "rlp-redswitches"
-        elif target == "digitalocean":
-            base = "rlp-digitalocean"
-        elif target and target in ARM64_TARGETS:
-            base = "rlp-arm64"
-        else:
-            base = "rlp-x86"
+        base = "rlp"
+        if target:
+            base = f"rlp-{target.replace('/', '-')}"
         return base + rlp_cpu_series_suffix(rlp_cpu, rlp_cpu_max)
-
-    if target == DAYTONA_GRAVITON5_TARGET:
-        if runner == "daytona-vm-hot":
-            return "daytona-graviton5-hot"
-        if runner in ("daytona", "daytona-vm"):
-            return "daytona-graviton5"
-
+    if target:
+        return f"{runner}-{target.replace('/', '-')}"
     return runner
 
 
@@ -65,7 +49,7 @@ def default_output_path(
     rlp_cpu: float | None = None,
     rlp_cpu_max: float | None = None,
 ) -> Path:
-    """Path like ``data/agent/rlp-x86/concurrency_<ts>_n10.jsonl``."""
+    """Path like ``data/agent/rlp/concurrency_<ts>_n10.jsonl``."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     series = result_series_name(
         runner,

@@ -299,9 +299,8 @@ def verify_suite(workspace: Path, *, precheck_exit: int) -> dict[str, Any]:
     """Full pytest including hidden tests (agent verify step).
 
     Checksum fields are counts/exit only. Do **not** include the raw pytest
-    summary string — under pack it gains flaky ``N warnings`` / similar noise
-    and blows ``distinct_checksums`` while exit_code stays 0 (seen on Phoenix
-    c0p125 at 528/704).
+    summary string — under pack it can gain flaky ``N warnings`` / similar noise
+    and blow ``distinct_checksums`` while exit_code stays 0.
     """
     proc = _pytest(workspace)
     passed = proc.returncode == 0

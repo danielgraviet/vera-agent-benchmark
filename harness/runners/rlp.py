@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import threading
 import time
 from typing import Any
 
@@ -21,12 +20,12 @@ from harness.env_probe import (
     probe_shell_command,
 )
 from harness.paths import ROOT
-from harness.regions import check_sandbox_arch, resolve_rlp_client_config
+from harness.regions import resolve_rlp_client_config
 from harness.rlp_create import build_rlp_resources, create_rlp_sandbox
 from harness.rlp_snapshots import is_registry_image_ref, resolve_boot_image
 
-# Native RLP disk snaps bake the app under /home/daytona/app (snapshot_common).
-# Dockerfile.* images use WORKDIR /app — registry boots must match.
+# Native disk snaps typically bake the app under /home/daytona/app.
+# The repo Dockerfile uses WORKDIR /app — registry boots must match.
 SNAPSHOT_APP_DIR = "/home/daytona/app"
 REGISTRY_APP_DIR = "/app"
 DEFAULT_EXEC_TIMEOUT_S = 600
@@ -41,7 +40,6 @@ class RlpRunner:
         exec_timeout_s: int = DEFAULT_EXEC_TIMEOUT_S,
         target: str | None = None,
         toolbox_url: str | None = None,
-        skip_arch_probe: bool = False,
         episodes_per_sandbox: int = 1,
         cpu: float = 1.0,
         cpu_max: float | None = None,
@@ -50,10 +48,8 @@ class RlpRunner:
         disk: float | None = None,
     ) -> None:
         load_dotenv(ROOT / ".env")
-        # Client-side throughput tuning (pool + poll cadence): without it, exec
-        # throughput plateaus at ~(100 x 1/(episode+RTT)) regardless of --levels
-        # and the create-wave poll storm floods the link. Env-tunable; see
-        # harness/rlp_client_tuning.py for the measured numbers.
+        # Client-side throughput tuning (pool + poll cadence). Env-tunable; see
+        # harness/rlp_client_tuning.py.
         rlp_client_tuning.apply()
         if episodes_per_sandbox < 1:
             raise ValueError("episodes_per_sandbox must be >= 1")
@@ -66,13 +62,12 @@ class RlpRunner:
                 f"memory_max ({memory_max}) must be >= memory ({memory})"
             )
         self._spec = spec
-        self._snapshot = snapshot or spec.artifact_name
+        self._snapshot = snapshot or spec.boot_image_for_rlp(target)
         self._exec_timeout_s = exec_timeout_s
         self._target = target
         self._episodes_per_sandbox = episodes_per_sandbox
         mem = spec.memory_gib() if memory is None else memory
         disk_gib = max(2, mem) if disk is None else disk
-        self._omit_mode = cpu_max is not None
         self._resources = build_rlp_resources(
             cpu=cpu,
             cpu_max=cpu_max,
@@ -82,23 +77,15 @@ class RlpRunner:
         )
         config = resolve_rlp_client_config(target, toolbox_url)
         self._client = Daytona(config)
-        routing = getattr(config, "region_routing", None)
         print(
-            f"rlp client: target={config.target!r} "
-            f"api_url={config.api_url!r} toolbox_url={config.toolbox_url!r} "
-            f"region_routing={routing!r} "
+            f"rlp client: target={getattr(config, 'target', None)!r} "
+            f"api_url={getattr(config, 'api_url', None)!r} "
+            f"toolbox_url={getattr(config, 'toolbox_url', None)!r} "
             f"benchmark={spec.id!r} episodes_per_sandbox={episodes_per_sandbox} "
             f"resources=cpu={cpu},cpu_max={cpu_max},memory={mem}GiB,"
             f"memory_max={memory_max},disk={disk_gib}GiB "
-            f"omit_dedicated={self._omit_mode} "
             f"client_tuning={rlp_client_tuning.settings()}"
         )
-
-        # Probed once on the first worker sandbox (avoids a spare create on
-        # capacity-constrained ARM64 regions).
-        self._arch = "unspecified"
-        self._arch_probed = skip_arch_probe or not target
-        self._arch_lock = threading.Lock()
 
         self._boot_image = resolve_boot_image(self._client, self._snapshot)
         self._registry_boot = is_registry_image_ref(self._boot_image)
@@ -138,20 +125,12 @@ class RlpRunner:
 
     def create_sandbox(self) -> Any:
         """Create one sandbox and wait until started. Does not exec or delete."""
-        sandbox = create_rlp_sandbox(
+        return create_rlp_sandbox(
             self._client,
             image=self._boot_image,
             resources=self._resources,
             timeout=self._create_timeout_s,
-            target=self._target,
-            omit_mode=self._omit_mode,
         )
-        if not self._arch_probed:
-            with self._arch_lock:
-                if not self._arch_probed:
-                    self._arch = check_sandbox_arch(sandbox, self._target)
-                    self._arch_probed = True
-        return sandbox
 
     def delete_sandbox(self, sandbox: Any | None) -> None:
         if sandbox is None:
@@ -176,7 +155,7 @@ class RlpRunner:
         When ``cold_first`` is True (create-exec-delete workers), episode 0
         ``latency_ms`` includes create if ``latency_origin`` is the create
         start. Hold-then-exec passes ``cold_first=False`` so every episode is
-        exec-only (``duration_ms`` is still the chip metric).
+        exec-only (``duration_ms`` is still the in-guest metric).
         """
         if episodes < 1:
             raise ValueError("episodes must be >= 1")
@@ -204,7 +183,6 @@ class RlpRunner:
                     "exit_code": exit_code,
                     "sandbox_id": sandbox_id,
                     "target": self._target,
-                    "arch": self._arch,
                     "benchmark": self._spec.id,
                     "episode_idx": episode_idx,
                     "cold": cold,
@@ -227,7 +205,6 @@ class RlpRunner:
                         "exit_code": -1,
                         "error": f"{type(exc).__name__}: {exc}",
                         "target": self._target,
-                        "arch": self._arch,
                         "benchmark": self._spec.id,
                         "sandbox_id": sandbox_id,
                         "episode_idx": episode_idx,
@@ -246,7 +223,7 @@ class RlpRunner:
         """Create once, exec ``episodes`` times, delete once.
 
         Episode 0 is cold (create + first exec). Later episodes are warm
-        (exec-only ``latency_ms``). ``duration_ms`` remains the chip metric.
+        (exec-only ``latency_ms``). ``duration_ms`` remains the in-guest metric.
         """
         episodes = self._episodes_per_sandbox if episodes is None else episodes
         if episodes < 1:
@@ -273,7 +250,6 @@ class RlpRunner:
                         "exit_code": -1,
                         "error": f"{type(exc).__name__}: {exc}",
                         "target": self._target,
-                        "arch": self._arch,
                         "benchmark": self._spec.id,
                         "episode_idx": 0,
                         "cold": True,

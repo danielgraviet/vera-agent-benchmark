@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 RunnerIdSource = Literal["sdk", "ifconfig"]
 
-# Eng fallback: public egress IP as a runner fingerprint.
+# Fallback: public egress IP as a runner fingerprint when SDK omits runner_id.
 IFCONFIG_SHELL = (
     "curl -fsS --max-time 5 ifconfig.net "
     "|| python -c "

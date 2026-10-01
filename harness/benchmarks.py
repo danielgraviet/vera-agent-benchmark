@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from harness.regions import REGISTRY_BOOT_TARGETS
-
 
 @dataclass(frozen=True)
 class BenchmarkSpec:
@@ -57,11 +55,8 @@ class BenchmarkSpec:
         return f"{self.artifact_name}-{safe}"
 
     def boot_image_for_rlp(self, target: str | None = None) -> str:
-        if target in REGISTRY_BOOT_TARGETS:
-            if not self.registry_image:
-                raise ValueError(
-                    f"Benchmark {self.id!r} has no registry_image for target {target!r}"
-                )
+        """Prefer the registry image; fall back to a named artifact."""
+        if self.registry_image:
             return self.registry_image
         return self.artifact_for_target(target)
 

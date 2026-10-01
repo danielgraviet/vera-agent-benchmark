@@ -3,8 +3,8 @@
 Supports container sandboxes (default) and Linux VM sandboxes
 (``--runner daytona-vm`` / ``daytona-vm-hot``).
 
-VM region default is ``us-west-3`` (eng: stock VM snaps are not in ``us``).
-Cold VM snaps boot from disk; hot (memory) snaps are RLP-ish warm starts.
+VM region default is ``us-west-3`` (stock VM snapshots are typically there).
+Cold VM snaps boot from disk; hot (memory) snaps are warm starts.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from harness.runner_id import IFCONFIG_SHELL, parse_ifconfig_stdout, sdk_runner_
 
 APP_DIR = "/home/daytona/app"
 DEFAULT_EXEC_TIMEOUT_S = 600
-# Eng: VM seed snaps (daytona-vm-*) are available in us-west-3, not default us.
+# Stock VM snapshots are typically available in us-west-3, not the default us.
 DEFAULT_VM_TARGET = "us-west-3"
 
 SandboxKind = Literal["container", "vm"]
