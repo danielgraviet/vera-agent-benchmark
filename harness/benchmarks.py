@@ -79,7 +79,7 @@ AGENT = BenchmarkSpec(
         "Coding-agent v3: seed broken package -> search -> AST -> oracle edit -> "
         "heavy pytest (no SQL); deterministic --n/--seed checksum"
     ),
-    registry_image="dtgraviet/vera-agent-benchmark:latest",
+    registry_image="agent-benchmark:v3",
 )
 
 BENCHMARKS: dict[str, BenchmarkSpec] = {AGENT.id: AGENT}

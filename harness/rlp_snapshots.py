@@ -36,7 +36,7 @@ def get_native_snapshot(client: Daytona, name: str) -> dict[str, Any] | None:
 
 
 def is_registry_image_ref(name_or_manifest: str) -> bool:
-    """True for Docker Hub / GHCR / digest refs (not native snap names)."""
+    """True for Docker Hub / GHCR / digest / local tag refs (not native snap names)."""
     s = name_or_manifest.strip()
     if not s:
         return False
@@ -44,15 +44,15 @@ def is_registry_image_ref(name_or_manifest: str) -> bool:
         return False
     if s.startswith("sha256:"):
         return True
-    # user/repo, registry.example/…, docker.io/…
-    return "/" in s
+    # user/repo, registry.example/…, docker.io/…, or local name:tag
+    return "/" in s or ":" in s
 
 
 def resolve_boot_image(client: Daytona, name_or_manifest: str) -> str:
     """Map a friendly snapshot name to the NFS ``manifest_name`` used by POST /vms.
 
-    Registry refs (e.g. ``dtgraviet/vera-agent-benchmark-rl:latest``) pass
-    through unchanged so RLP can pull OCI images without a native snapshot.
+    Registry refs (e.g. ``agent-benchmark:v3``) pass through unchanged so RLP
+    can pull OCI images without a native snapshot.
     """
     if name_or_manifest.startswith("snap-") or is_registry_image_ref(name_or_manifest):
         return name_or_manifest
