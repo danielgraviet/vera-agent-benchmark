@@ -20,7 +20,7 @@ from harness.env_probe import (
     probe_shell_command,
 )
 from harness.paths import ROOT
-from harness.regions import resolve_rlp_client_config
+from harness.rlp_config import resolve_rlp_client_config
 from harness.rlp_create import build_rlp_resources, create_rlp_sandbox
 
 # Native disk snaps typically bake the app under /home/daytona/app.

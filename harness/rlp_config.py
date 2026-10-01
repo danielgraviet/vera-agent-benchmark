@@ -1,4 +1,4 @@
-"""Thin RLP client config helpers.
+"""RLP client config helpers.
 
 ``--target`` and ``--toolbox-url`` are optional passthroughs to
 ``DaytonaConfig``. Credentials and the default API URL come from the SDK
@@ -17,16 +17,11 @@ def resolve_rlp_client_config(
     toolbox_url: str | None = None,
 ) -> DaytonaConfig:
     """Build an RLP ``DaytonaConfig`` from optional CLI overrides."""
-    kwargs: dict[str, Any] = {}
-    if target:
-        kwargs["target"] = target
-    if toolbox_url:
-        kwargs["toolbox_url"] = toolbox_url
-    return _daytona_config(**kwargs)
+    return _daytona_config(target=target, toolbox_url=toolbox_url)
 
 
 def _daytona_config(**kwargs: Any) -> DaytonaConfig:
-    """Build DaytonaConfig, dropping kwargs the installed SDK does not accept."""
+    """Build ``DaytonaConfig``, dropping unknown or ``None`` kwargs."""
     fields = getattr(DaytonaConfig, "__dataclass_fields__", {})
     return DaytonaConfig(
         **{k: v for k, v in kwargs.items() if k in fields and v is not None}
