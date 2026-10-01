@@ -89,9 +89,10 @@ If a refactor changes behavior, checksum assertions in
 `tests/test_coding_loop.py` / `tests/golden_agent.json` will fail. Update
 goldens only when the change is intentional.
 
+## Notes for integrators
 
+- RLP boots use `--snapshot` / the benchmark `registry_image` (default
+  `agent-benchmark:v3`) passed straight through to create — no native snapshot
+  lookup in this repo.
 - RLP client tuning monkey-patches `rlp-sdk` connection pool and start-poll
   cadence (`harness/rlp_client_tuning.py`) for high-concurrency ladders.
-- Native snapshot helpers may call private SDK HTTP helpers
-  (`harness/rlp_snapshots.py`); prefer `--snapshot` with a registry image
-  (`agent-benchmark:v3`) when possible.

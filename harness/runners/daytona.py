@@ -26,7 +26,6 @@ from harness.env_probe import (
     probe_shell_command,
 )
 from harness.paths import ROOT
-from harness.runner_id import IFCONFIG_SHELL, parse_ifconfig_stdout, sdk_runner_id
 
 APP_DIR = "/home/daytona/app"
 DEFAULT_EXEC_TIMEOUT_S = 600
@@ -117,35 +116,6 @@ class DaytonaRunner:
             timeout=timeout,
         )
 
-    def _resolve_runner_id(self, sandbox) -> tuple[str | None, str | None]:
-        """SDK runner_id first; VM sandboxes fall back to curl ifconfig.net."""
-        rid = sdk_runner_id(sandbox)
-        if rid:
-            return rid, "sdk"
-        if self._sandbox_kind != "vm":
-            return None, None
-        try:
-            response = sandbox.process.exec(IFCONFIG_SHELL, timeout=15)
-            exit_code = int(response.exit_code or 0)
-            stdout = (response.result or "").strip()
-            if exit_code != 0:
-                print(
-                    f"warning: {self._probe_label} ifconfig runner probe "
-                    f"failed: {(stdout or f'exit {exit_code}')[:200]}"
-                )
-                return None, None
-            ip = parse_ifconfig_stdout(stdout)
-            if not ip:
-                print(
-                    f"warning: {self._probe_label} ifconfig runner probe "
-                    f"unparseable: {stdout[:200]}"
-                )
-                return None, None
-            return ip, "ifconfig"
-        except Exception as exc:  # noqa: BLE001
-            print(f"warning: {self._probe_label} ifconfig runner probe failed: {exc}")
-            return None, None
-
     def probe_env(self) -> dict[str, Any]:
         host = host_env()
         sandbox = None
@@ -194,9 +164,6 @@ class DaytonaRunner:
         try:
             sandbox = self._create_sandbox(timeout=120)
             sandbox_id = sandbox.id
-            runner_id, runner_id_source = sdk_runner_id(sandbox), "sdk"
-            if not runner_id:
-                runner_id_source = None
             argv = " ".join(self._spec.agent_argv(n, seed))
             cmd = f"{self._agent_cmd} {argv}"
 
@@ -223,9 +190,6 @@ class DaytonaRunner:
                         "episode_idx": episode_idx,
                         "cold": cold,
                     }
-                    if runner_id:
-                        record["runner_id"] = runner_id
-                        record["runner_id_source"] = runner_id_source
                     if exit_code == 0:
                         try:
                             payload = json.loads(stdout)
@@ -249,16 +213,7 @@ class DaytonaRunner:
                         "episode_idx": episode_idx,
                         "cold": cold,
                     }
-                    if runner_id:
-                        fail_record["runner_id"] = runner_id
-                        fail_record["runner_id_source"] = runner_id_source
                     records.append(fail_record)
-            if not runner_id:
-                runner_id, runner_id_source = self._resolve_runner_id(sandbox)
-            if runner_id:
-                for rec in records:
-                    rec.setdefault("runner_id", runner_id)
-                    rec.setdefault("runner_id_source", runner_id_source)
             return records
         except Exception as exc:  # noqa: BLE001
             if not records:

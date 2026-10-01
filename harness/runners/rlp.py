@@ -22,13 +22,22 @@ from harness.env_probe import (
 from harness.paths import ROOT
 from harness.regions import resolve_rlp_client_config
 from harness.rlp_create import build_rlp_resources, create_rlp_sandbox
-from harness.rlp_snapshots import is_registry_image_ref, resolve_boot_image
 
 # Native disk snaps typically bake the app under /home/daytona/app.
 # The repo Dockerfile uses WORKDIR /app — registry boots must match.
 SNAPSHOT_APP_DIR = "/home/daytona/app"
 REGISTRY_APP_DIR = "/app"
 DEFAULT_EXEC_TIMEOUT_S = 600
+
+
+def _is_registry_image_ref(name_or_manifest: str) -> bool:
+    """True for OCI/registry refs (not friendly native snapshot names)."""
+    s = name_or_manifest.strip()
+    if not s or s.startswith("snap-"):
+        return False
+    if s.startswith("sha256:"):
+        return True
+    return "/" in s or ":" in s
 
 
 class RlpRunner:
@@ -87,8 +96,8 @@ class RlpRunner:
             f"client_tuning={rlp_client_tuning.settings()}"
         )
 
-        self._boot_image = resolve_boot_image(self._client, self._snapshot)
-        self._registry_boot = is_registry_image_ref(self._boot_image)
+        self._boot_image = self._snapshot.strip()
+        self._registry_boot = _is_registry_image_ref(self._boot_image)
         self._create_timeout_s = 300 if self._registry_boot else 120
         self._app_dir = (
             REGISTRY_APP_DIR if self._registry_boot else SNAPSHOT_APP_DIR
@@ -96,8 +105,8 @@ class RlpRunner:
         self._run_env = spec.run_env(self._app_dir)
         self._agent_cmd = spec.agent_command()
         print(
-            f"rlp boot image: {self._snapshot!r} -> {self._boot_image!r} "
-            f"(app_dir={self._app_dir})"
+            f"rlp boot image: {self._boot_image!r} "
+            f"(registry={self._registry_boot}, app_dir={self._app_dir})"
         )
 
     def probe_env(self) -> dict[str, Any]:

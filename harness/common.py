@@ -9,9 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Self, TextIO
 
-# One concurrent worker → one or more episode records (sandbox reuse).
 RunWorker = Callable[[int, int], list[dict[str, Any]]]
-# Back-compat alias for single-shot runners.
 RunOne = Callable[[int, int], dict[str, Any]]
 
 
@@ -77,7 +75,6 @@ def summarize(
     ]
     checksums = {r["checksum"] for r in records if r.get("checksum")}
     failures = [r for r in records if r.get("exit_code", 0) != 0]
-    runner_ids = {str(r["runner_id"]) for r in records if r.get("runner_id")}
 
     summary: dict[str, Any] = {
         "runs": len(records),
@@ -104,8 +101,6 @@ def summarize(
     if warm_latencies:
         summary["p50_warm_ms"] = round(percentile(warm_latencies, 50), 1)
         summary["p99_warm_ms"] = round(percentile(warm_latencies, 99), 1)
-    if runner_ids:
-        summary["distinct_runners"] = len(runner_ids)
     return summary
 
 
@@ -128,8 +123,7 @@ def run_level(
             pool.submit(run_worker, n, seed + (i % mod)) for i in range(concurrency)
         ]
         for future in as_completed(futures):
-            for record in future.result():
-                yield record
+            yield from future.result()
 
 
 def run_suite(
