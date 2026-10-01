@@ -1,4 +1,4 @@
-"""Host + in-sandbox hardware probe for JSONL meta.env labeling."""
+"""Host + in-sandbox hardware probe for JSONL ``meta.env`` labeling."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import platform
 import subprocess
 from typing import Any
 
-# Inline script run inside docker/sandbox images (stdlib only).
-PROBE_PY = r"""
+# Stdlib-only script executed inside the sandbox (base64-wrapped for quoting).
+_PROBE_PY = """
 import json, os, platform
 from pathlib import Path
 
@@ -48,33 +48,16 @@ print(json.dumps({
 
 
 def probe_shell_command(python: str = "python") -> str:
-    """Shell-safe one-liner that runs PROBE_PY (avoids quoting multiline -c)."""
-    b64 = base64.b64encode(PROBE_PY.encode("utf-8")).decode("ascii")
+    """Return a shell one-liner that runs the in-sandbox probe script."""
+    b64 = base64.b64encode(_PROBE_PY.encode("utf-8")).decode("ascii")
     return (
         f"{python} -c "
         f'"import base64; exec(base64.b64decode({b64!r}).decode())"'
     )
 
 
-def parse_cpuinfo(text: str) -> str:
-    """Extract a stable CPU label from /proc/cpuinfo text."""
-    model = hardware = cpu_part = ""
-    for line in text.splitlines():
-        if ":" not in line:
-            continue
-        key, _, val = line.partition(":")
-        key, val = key.strip().lower(), val.strip()
-        if key == "model name" and not model:
-            model = val
-        elif key == "hardware" and not hardware:
-            hardware = val
-        elif key == "cpu part" and not cpu_part:
-            cpu_part = val
-    return model or hardware or cpu_part or "unknown"
-
-
 def host_env() -> dict[str, Any]:
-    """Harness-process view (useful for Docker-on-Mac Apple chip labels)."""
+    """Harness-host labels (e.g. Apple Silicon brand via sysctl on Darwin)."""
     host_cpu: str | None = None
     if platform.system() == "Darwin":
         try:
@@ -103,7 +86,7 @@ def merge_env(
     probe: str,
     probe_error: str | None = None,
 ) -> dict[str, Any]:
-    """Stable meta.env shape; remote fields optional on failure / skip."""
+    """Build the stable ``meta.env`` object (remote fields optional)."""
     env: dict[str, Any] = {
         "arch": None,
         "cpu_model": None,
@@ -115,7 +98,7 @@ def merge_env(
     }
     if remote:
         for key in ("arch", "cpu_model", "cpu_count", "platform"):
-            if key in remote and remote[key] is not None:
+            if remote.get(key) is not None:
                 env[key] = remote[key]
     if probe_error:
         env["cpu_model"] = env["cpu_model"] or "probe_failed"
@@ -124,14 +107,13 @@ def merge_env(
 
 
 def parse_probe_stdout(stdout: str) -> dict[str, Any]:
-    """Parse one JSON object from probe script stdout."""
+    """Parse the probe script's JSON object from sandbox stdout."""
     text = (stdout or "").strip()
     if not text:
         raise ValueError("empty probe stdout")
-    line = text.splitlines()[-1]
-    data = json.loads(line)
+    data = json.loads(text.splitlines()[-1])
     if not isinstance(data, dict):
-        raise ValueError(f"probe stdout is not an object: {data!r}")
+        raise ValueError(f"probe stdout is not an object: {data!r}")  # noqa: TRY004
     return data
 
 
