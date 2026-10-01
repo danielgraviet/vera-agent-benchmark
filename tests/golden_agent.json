@@ -1,0 +1,46 @@
+{
+  "checksums": {
+    "n1_seed42": "5119a007831ca2c859714962b64a29ae690245cab2b3b8cacc6727b108ae2282",
+    "n1_seed7": "33267673ecdc9cf85402041a4fbd60b75fc4c1f9a71004903f2b82748d91954a",
+    "n2_seed42": "c3482b969ec57230f2284af185185e8e205072948f7b51f412d756a213bb6f51",
+    "n5_seed42": "92e44df24f1f959ff1d0c516bfa7dfcfa8b1a8fc46534ceb75c91747b724d57c"
+  },
+  "n1_seed42_steps": {
+    "n": 1,
+    "seed": 42,
+    "seed_meta": {
+      "n_modules": 8,
+      "n_cases": 128,
+      "burn_rounds": 12000,
+      "seed": 42
+    },
+    "search": {
+      "iterations": 1,
+      "total_matches": 55,
+      "files": 12,
+      "digest": "3a5dcf2a5dfdc46ff3b172553b95e60a59587c2e4b8b311e6d5a0b794b27d5ae"
+    },
+    "ast": {
+      "iterations": 1,
+      "total_functions": 47,
+      "total_classes": 8,
+      "files": 12,
+      "digest": "d744dd9e9194e5279ee8392a873c42fbe1bd789546f56d99b6bffbe81e587bb0"
+    },
+    "edit": {
+      "steps": [
+        "patched app/mathy.py",
+        "patched app/stats.py",
+        "patched app/texty.py"
+      ],
+      "patched_files": 3
+    },
+    "verify": {
+      "passed": true,
+      "exit_code": 0,
+      "passed_count": 136,
+      "failed_count": 0,
+      "precheck_exit": 1
+    }
+  }
+}

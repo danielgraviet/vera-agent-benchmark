@@ -11,3 +11,7 @@ dependencies = [
     "python-dotenv>=1.1.1",
     "pytest",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
