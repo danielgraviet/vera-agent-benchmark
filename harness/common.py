@@ -9,12 +9,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Self, TextIO
 
+# Worker: (n, seed) -> one or more episode records (sandbox reuse allowed).
 RunWorker = Callable[[int, int], list[dict[str, Any]]]
-RunOne = Callable[[int, int], dict[str, Any]]
 
 
-class JsonlWriter:
-    """Append-only JSON Lines writer that flushes after every record."""
+class _JsonlWriter:
+    """JSON Lines writer that flushes after every record."""
 
     def __init__(self, path: Path) -> None:
         self._path = path
@@ -37,26 +37,26 @@ class JsonlWriter:
         self._fp.flush()
 
 
-def percentile(values: list[float], pct: float) -> float:
+def _percentile(values: list[float], pct: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
     k = (len(ordered) - 1) * (pct / 100)
-    f = int(k)
-    c = min(f + 1, len(ordered) - 1)
-    if f == c:
-        return ordered[f]
-    return ordered[f] + (ordered[c] - ordered[f]) * (k - f)
+    lo = int(k)
+    hi = min(lo + 1, len(ordered) - 1)
+    if lo == hi:
+        return ordered[lo]
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * (k - lo)
 
 
 def apply_workload_payload(record: dict[str, Any], payload: dict[str, Any]) -> None:
     """Copy stable fields from in-sandbox JSON onto a harness run record."""
-    for key in ("checksum", "duration_ms", "eval_task_id"):
+    for key in ("checksum", "duration_ms"):
         if payload.get(key) is not None:
             record[key] = payload[key]
 
 
-def summarize(
+def _summarize(
     records: list[dict[str, Any]],
     wall_time_s: float,
     *,
@@ -74,37 +74,36 @@ def summarize(
         if r.get("duration_ms") is not None
     ]
     checksums = {r["checksum"] for r in records if r.get("checksum")}
-    failures = [r for r in records if r.get("exit_code", 0) != 0]
+    failures = sum(1 for r in records if r.get("exit_code", 0) != 0)
+    successes = len(records) - failures
 
     summary: dict[str, Any] = {
         "runs": len(records),
-        "failures": len(failures),
+        "failures": failures,
         "distinct_checksums": len(checksums),
-        "checksum_ok": len(checksums) <= max_distinct_checksums and not failures,
-        "p50_ms": round(percentile(latencies, 50), 1),
-        "p95_ms": round(percentile(latencies, 95), 1),
-        "p99_ms": round(percentile(latencies, 99), 1),
+        "checksum_ok": len(checksums) <= max_distinct_checksums and failures == 0,
+        "p50_ms": round(_percentile(latencies, 50), 1),
+        "p95_ms": round(_percentile(latencies, 95), 1),
+        "p99_ms": round(_percentile(latencies, 99), 1),
         "max_ms": round(max(latencies), 1) if latencies else 0,
         "throughput_per_sec": (
-            round((len(records) - len(failures)) / wall_time_s, 2)
-            if wall_time_s > 0
-            else 0
+            round(successes / wall_time_s, 2) if wall_time_s > 0 else 0
         ),
         "attempt_throughput_per_sec": (
             round(len(records) / wall_time_s, 2) if wall_time_s > 0 else 0
         ),
     }
     if durations:
-        summary["p50_duration_ms"] = round(percentile(durations, 50), 1)
-        summary["p99_duration_ms"] = round(percentile(durations, 99), 1)
+        summary["p50_duration_ms"] = round(_percentile(durations, 50), 1)
+        summary["p99_duration_ms"] = round(_percentile(durations, 99), 1)
         summary["max_duration_ms"] = round(max(durations), 1)
     if warm_latencies:
-        summary["p50_warm_ms"] = round(percentile(warm_latencies, 50), 1)
-        summary["p99_warm_ms"] = round(percentile(warm_latencies, 99), 1)
+        summary["p50_warm_ms"] = round(_percentile(warm_latencies, 50), 1)
+        summary["p99_warm_ms"] = round(_percentile(warm_latencies, 99), 1)
     return summary
 
 
-def run_level(
+def _run_level(
     concurrency: int,
     n: int,
     seed: int,
@@ -112,11 +111,7 @@ def run_level(
     *,
     job_seed_mod: int = 1,
 ) -> Iterator[dict[str, Any]]:
-    """Yield each episode result as soon as that worker finishes.
-
-    ``job_seed_mod > 1`` rotates the seed per concurrent job
-    (``seed + i % job_seed_mod``). Default 1: every job uses the same seed.
-    """
+    """Yield episode records as each concurrent worker finishes."""
     mod = max(1, job_seed_mod)
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = [
@@ -136,22 +131,22 @@ def run_suite(
     meta: dict[str, Any] | None = None,
     job_seed_mod: int = 1,
 ) -> None:
+    """Create-exec-delete ladder: for each concurrency level, fan out workers."""
     max_checksums = max(1, job_seed_mod)
-    with JsonlWriter(output) as writer:
+    with _JsonlWriter(output) as writer:
         if meta:
             writer.write({"type": "meta", **meta})
         for level in levels:
             start = time.monotonic()
             records: list[dict[str, Any]] = []
-
-            for record in run_level(
+            for record in _run_level(
                 level, n, seed, run_worker, job_seed_mod=job_seed_mod
             ):
                 writer.write({"type": "run", "concurrency": level, **record})
                 records.append(record)
 
             wall_time_s = time.monotonic() - start
-            summary = summarize(
+            summary = _summarize(
                 records, wall_time_s, max_distinct_checksums=max_checksums
             )
             writer.write({"type": "summary", "concurrency": level, **summary})
@@ -168,12 +163,10 @@ def run_hold_suite(
     meta: dict[str, Any] | None = None,
     job_seed_mod: int = 1,
 ) -> None:
-    """Pre-create a fleet of C, barrier, exec, then delete.
+    """Pre-create a fleet, barrier, exec all, then delete.
 
-    ``throughput_per_sec`` is completed episodes / exec-wave wall (chip packing).
-    ``attempt_throughput_per_sec`` keeps the raw attempt rate for auditability.
-    ``throughput_including_create`` keeps the product number that includes
-    sandbox boot. Create/delete churn is isolated from episode ``duration_ms``.
+    Primary ``throughput_per_sec`` uses exec-wave wall only. Create/delete
+    walls are recorded separately; ``throughput_including_create`` is optional.
     """
     episodes = int(getattr(runner, "_episodes_per_sandbox", 1))
     if episodes < 1:
@@ -182,11 +175,11 @@ def run_hold_suite(
     spec_id = getattr(getattr(runner, "_spec", None), "id", None)
     target = getattr(runner, "_target", None)
 
-    def _write(writer: JsonlWriter, level: int, record: dict[str, Any]) -> dict[str, Any]:
+    def _write(writer: _JsonlWriter, level: int, record: dict[str, Any]) -> dict[str, Any]:
         writer.write({"type": "run", "concurrency": level, **record})
         return record
 
-    with JsonlWriter(output) as writer:
+    with _JsonlWriter(output) as writer:
         if meta:
             writer.write({"type": "meta", **meta})
         for level in levels:
@@ -209,7 +202,6 @@ def run_hold_suite(
                                     "exit_code": -1,
                                     "error": f"{type(exc).__name__}: {exc}",
                                     "target": target,
-                                    "arch": getattr(runner, "_arch", "unspecified"),
                                     "benchmark": spec_id,
                                     "episode_idx": 0,
                                     "cold": True,
@@ -251,7 +243,7 @@ def run_hold_suite(
                             pass
             delete_wall_s = time.monotonic() - delete_start
 
-            summary = summarize(
+            summary = _summarize(
                 records, exec_wall_s, max_distinct_checksums=max_checksums
             )
             summary["create_wall_s"] = round(create_wall_s, 3)
